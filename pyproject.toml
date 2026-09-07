@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redkeymon"
+version = "0.2.0"
+description = "CPE 486/586 Homework 1 - elementary row operations on PyTorch tensors"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["torch"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
