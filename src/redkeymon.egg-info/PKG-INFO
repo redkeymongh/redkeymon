@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: redkeymon
-Version: 0.2.0
-Summary: CPE 486/586 Homework 1 - elementary row operations on PyTorch tensors
-Requires-Python: >=3.9
-Description-Content-Type: text/markdown
-Requires-Dist: torch
-
-# redkeymon
