@@ -1,4 +1,9 @@
 import numpy as np
+import pandas as pd
+import torch
+from scipy.stats import norm
+
+import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
@@ -56,3 +61,60 @@ class LinearRegression:
         ax[1, 0].legend(); ax[1, 0].set_title("Parameters vs epoch")
         ax[1, 1].plot(self.loss_history); ax[1, 1].set_title("MSE loss vs epoch")
         plt.tight_layout(); plt.show()
+class CauchyRegression:
+    """Linear regression y = w0 + w.x fitted by minimizing the Cauchy loss
+    l(yhat, y) = c^2/2 * log(1 + ((y - yhat)/c)^2) with Adam in PyTorch."""
+
+    def __init__(self, c=1.0, lr=0.1, epochs=3000, seed=0):
+        self.c, self.lr, self.epochs, self.seed = c, lr, epochs, seed
+        self.history = []
+
+    def _loss(self, yhat, y, reduction="mean"):
+        r = (y - yhat) / self.c
+        l = (self.c ** 2 / 2) * torch.log1p(r ** 2)
+        return l.mean() if reduction == "mean" else l.sum()
+
+    def fit(self, X, y):
+        torch.manual_seed(self.seed)
+        X = np.asarray(X, float); y = np.asarray(y, float)
+        self.X_, self.y_ = X, y
+        self.mu_, self.sd_ = X.mean(0), X.std(0)
+        Xt = torch.tensor((X - self.mu_) / self.sd_, dtype=torch.float64)
+        yt = torch.tensor(y, dtype=torch.float64)
+        w = torch.zeros(X.shape[1], dtype=torch.float64, requires_grad=True)
+        b = torch.tensor(float(y.mean()), dtype=torch.float64, requires_grad=True)
+        opt = torch.optim.Adam([w, b], lr=self.lr)
+        sched = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.01 ** (1 / self.epochs))
+        self.history = []
+        for _ in range(self.epochs):
+            opt.zero_grad()
+            loss = self._loss(Xt @ w + b, yt)
+            loss.backward(); opt.step(); sched.step()
+            self.history.append(loss.item())
+        w_s, b_s = w.detach().numpy(), b.item()
+        self.coef_ = w_s / self.sd_
+        self.intercept_ = b_s - np.sum(w_s * self.mu_ / self.sd_)
+        return self
+
+    def predict(self, X):
+        return self.intercept_ + np.asarray(X, float) @ self.coef_
+
+    def loss(self, X=None, y=None, reduction="mean"):
+        X = self.X_ if X is None else X
+        y = self.y_ if y is None else y
+        return self._loss(torch.tensor(self.predict(X)),
+                          torch.tensor(np.asarray(y, float)), reduction).item()
+
+    def conf_int(self, alpha=0.05):
+        """Asymptotic sandwich (M-estimator) confidence intervals."""
+        n = len(self.y_); Xd = np.column_stack([np.ones(n), self.X_])
+        theta = np.r_[self.intercept_, self.coef_]
+        r = self.y_ - Xd @ theta; c = self.c
+        psi = r / (1 + (r / c) ** 2)
+        dpsi = (1 - (r / c) ** 2) / (1 + (r / c) ** 2) ** 2
+        H = (Xd * dpsi[:, None]).T @ Xd
+        B = (Xd * (psi ** 2)[:, None]).T @ Xd
+        Hi = np.linalg.inv(H)
+        se = np.sqrt(np.diag(Hi @ B @ Hi)); z = norm.ppf(1 - alpha / 2)
+        return pd.DataFrame({"coef": theta, "std_err": se,
+                             "ci_low": theta - z * se, "ci_high": theta + z * se})
